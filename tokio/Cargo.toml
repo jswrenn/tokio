@@ -23,7 +23,7 @@ keywords = ["io", "async", "non-blocking", "futures"]
 
 [features]
 # Include nothing by default
-default = []
+default = ["taskdump", "full", "rt", "rt-multi-thread"]
 
 # enable everything
 full = [
@@ -85,6 +85,7 @@ signal = [
   "windows-sys/Win32_System_Console",
 ]
 sync = []
+taskdump = []
 test-util = ["rt", "sync", "time"]
 time = []
 
