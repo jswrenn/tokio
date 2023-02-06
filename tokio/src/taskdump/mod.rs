@@ -2,28 +2,28 @@
 
 use std::fmt;
 
-/// (WIP) Request a task dump.
-#[derive(Debug)]
-pub struct TaskDumpRequest {
-
-}
+use crate::runtime::Handle;
+use serde::{self, Serialize};
 
 /// (WIP) A task dump.
-pub struct TaskDump {}
+pub struct TaskDump {
 
-impl TaskDumpRequest {
-    /// Construct a new `TaskDumpRequest`.
-    pub fn new() -> Self {
-        todo!()
-    }
-
-    /// boop
-    pub fn request() -> TaskDump {
-        todo!()
-    }
 }
 
-impl TaskDump {}
+#[derive(Serialize)]
+#[serde(tag = "flavor")]
+enum Runtime {
+
+
+}
+
+
+impl TaskDump {
+    fn new(handle: &Handle) -> Self {
+        
+        TaskDump {}
+    }
+}
 
 impl fmt::Debug for TaskDump {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

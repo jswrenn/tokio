@@ -175,6 +175,31 @@ cfg_rt! {
                 }
             }
         }
+
+        cfg_taskdump! {
+            use crate::taskdump::TaskDump;
+
+            impl Handle {
+                pub fn taskdump(&self) -> TaskDump {
+                    todo!()
+                }
+            }
+        }
+    }
+
+    cfg_taskdump! {    
+        impl Handle {
+            pub(crate) fn in_pause<F, R>(&self, f: F) -> Option<R> 
+            where
+                F: Send + FnOnce() -> R,
+                R: Send,
+            {
+                match self {
+                    Handle::CurrentThread(handle) => todo!(),
+                    Handle::MultiThread(handle) => handle.in_pause(f),
+                }
+            }
+        }
     }
 }
 

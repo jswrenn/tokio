@@ -321,6 +321,18 @@ cfg_metrics! {
     }
 }
 
+cfg_taskdump! {
+    impl Handle {
+        pub fn in_pause<F, R>(&self, f: F) -> Option<R> 
+        where
+            F: Send + FnOnce() -> R,
+            R: Send,
+        {
+            self.inner.in_pause(f)
+        }
+    }
+}
+
 /// Error returned by `try_current` when no Runtime has been started
 #[derive(Debug)]
 pub struct TryCurrentError {

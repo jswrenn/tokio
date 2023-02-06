@@ -21,7 +21,7 @@ pub(crate) struct BlockingPool {
 
 #[derive(Clone)]
 pub(crate) struct Spawner {
-    inner: Arc<Inner>,
+    pub(in super::super) inner: Arc<Inner>,
 }
 
 #[derive(Default)]
@@ -71,9 +71,9 @@ impl SpawnerMetrics {
     }
 }
 
-struct Inner {
+pub(in super::super) struct Inner {
     /// State shared between worker threads.
-    shared: Mutex<Shared>,
+    pub(in super::super) shared: Mutex<Shared>,
 
     /// Pool threads wait on this.
     condvar: Condvar,
@@ -100,7 +100,7 @@ struct Inner {
     metrics: SpawnerMetrics,
 }
 
-struct Shared {
+pub(in super::super) struct Shared {
     queue: VecDeque<Task>,
     num_notify: u32,
     shutdown: bool,
@@ -110,13 +110,19 @@ struct Shared {
     /// necessary but helps avoid Valgrind false positives, see
     /// <https://github.com/tokio-rs/tokio/commit/646fbae76535e397ef79dbcaacb945d4c829f666>
     /// for more information.
-    last_exiting_thread: Option<thread::JoinHandle<()>>,
+    pub(in super::super) last_exiting_thread: Option<Thread>,
     /// This holds the JoinHandles for all running threads; on shutdown, the thread
     /// calling shutdown handles joining on these.
-    worker_threads: HashMap<usize, thread::JoinHandle<()>>,
+    pub(in super::super) worker_threads: HashMap<usize, Thread>,
     /// This is a counter used to iterate worker_threads in a consistent order (for loom's
     /// benefit).
     worker_thread_index: usize,
+}
+
+pub(in super::super) struct Thread {
+    pub(crate) join_handle: thread::JoinHandle<()>,
+    #[cfg(all(tokio_unstable, feature = "taskdump"))]
+    pub(crate) pid: nix::unistd::Pid,
 }
 
 pub(crate) struct Task {
@@ -259,15 +265,15 @@ impl BlockingPool {
         drop(shared);
 
         if self.shutdown_rx.wait(timeout) {
-            let _ = last_exited_thread.map(|th| th.join());
+            let _ = last_exited_thread.map(|th| th.join_handle.join());
 
             // Loom requires that execution be deterministic, so sort by thread ID before joining.
             // (HashMaps use a randomly-seeded hash function, so the order is nondeterministic)
-            let mut workers: Vec<(usize, thread::JoinHandle<()>)> = workers.into_iter().collect();
+            let mut workers: Vec<(usize, Thread)> = workers.into_iter().collect();
             workers.sort_by_key(|(id, _)| *id);
 
-            for (_id, handle) in workers.into_iter() {
-                let _ = handle.join();
+            for (_id, thread) in workers.into_iter() {
+                let _ = thread.join_handle.join();
             }
         }
     }
@@ -414,10 +420,10 @@ impl Spawner {
                     let id = shared.worker_thread_index;
 
                     match self.spawn_thread(shutdown_tx, rt, id) {
-                        Ok(handle) => {
+                        Ok(thread) => {
                             self.inner.metrics.inc_num_threads();
                             shared.worker_thread_index += 1;
-                            shared.worker_threads.insert(id, handle);
+                            shared.worker_threads.insert(id, thread);
                         }
                         Err(ref e)
                             if is_temporary_os_thread_error(e)
@@ -454,7 +460,7 @@ impl Spawner {
         shutdown_tx: shutdown::Sender,
         rt: &Handle,
         id: usize,
-    ) -> std::io::Result<thread::JoinHandle<()>> {
+    ) -> std::io::Result<Thread> {
         let mut builder = thread::Builder::new().name((self.inner.thread_name)());
 
         if let Some(stack_size) = self.inner.stack_size {
@@ -463,11 +469,22 @@ impl Spawner {
 
         let rt = rt.clone();
 
-        builder.spawn(move || {
+        #[cfg(all(tokio_unstable, feature = "taskdump"))]
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+
+        let join_handle = builder.spawn(move || {
+            #[cfg(all(tokio_unstable, feature = "taskdump"))]
+            sender.send(nix::unistd::gettid()).unwrap();
             // Only the reference should be moved into the closure
             let _enter = rt.enter();
             rt.inner.blocking_spawner().inner.run(id);
             drop(shutdown_tx);
+        })?;
+
+        Ok(Thread {
+            join_handle,
+            #[cfg(all(tokio_unstable, feature = "taskdump"))]
+            pid: receiver.recv().unwrap(),
         })
     }
 }
@@ -587,8 +604,8 @@ impl Inner {
             f()
         }
 
-        if let Some(handle) = join_on_thread {
-            let _ = handle.join();
+        if let Some(thread) = join_on_thread {
+            let _ = thread.join_handle.join();
         }
     }
 }

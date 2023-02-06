@@ -91,6 +91,69 @@ cfg_metrics! {
     }
 }
 
+cfg_taskdump! {
+    impl Handle {
+        pub(in super::super) fn in_pause<F, R>(&self, f: F) -> Option<R> 
+        where
+            F: Send + FnOnce() -> R,
+            R: Send,
+        {
+            use nix::{
+                libc,
+                sys::{
+                    ptrace,
+                    wait::{waitpid, WaitStatus},
+                },
+                unistd::{fork, read, write, ForkResult},
+            };
+
+            std::thread::scope(|s| s.spawn(|| {
+                let shared = self.blocking_spawner.inner.shared.lock();
+                let (on_pause_read_fd, on_pause_write_fd) = nix::unistd::pipe().unwrap();
+                let (on_resume_read_fd, on_resume_write_fd) = nix::unistd::pipe().unwrap();
+
+                match unsafe { fork() } {
+                    Ok(ForkResult::Parent { child, .. }) => {
+                        // wait for the ptracer to signal that all workers are stopped
+                        assert_eq!(read(on_pause_read_fd, &mut [0]), Ok(1));
+
+                        let result = f();
+
+                        // signal to the ptracer that workers should be resumed
+                        write(on_resume_write_fd, b"\n").ok();
+
+                        assert_eq!(waitpid(child, None), Ok(WaitStatus::Exited(child, 0)));
+
+                        Some(result)
+                    }
+                    Ok(ForkResult::Child) => {
+                        let threads = &shared.worker_threads;
+                        for thread in threads.values() {
+                            ptrace::attach(thread.pid).unwrap();
+                        }
+
+                        // signal to the trace thread that all tasks have been stopped
+                        write(on_pause_write_fd, b"\n").ok();
+
+                        // wait for all tracing to be resumed
+                        assert_eq!(read(on_resume_read_fd, &mut [0]), Ok(1));
+
+                        for thread in threads.values() {
+                            ptrace::detach(thread.pid, None).unwrap();
+                        }
+
+                        // don't attempt to unlock workers mutex from child
+                        std::mem::forget(shared);
+
+                        unsafe { libc::_exit(0) };
+                    }
+                    Err(_) => None,
+                }
+            }).join()).unwrap()
+        }
+    }
+}
+
 impl fmt::Debug for Handle {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("multi_thread::Handle { ... }").finish()
