@@ -172,6 +172,37 @@ impl<S: 'static> OwnedTasks<S> {
     }
 }
 
+cfg_taskdump! {
+    use crate::util::linked_list::Iter;
+    use serde::ser::{Serialize, Serializer, SerializeSeq};
+
+    impl<S: 'static> OwnedTasks<S> {
+        /// Locks the tasks, and calls `f` on an iterator over them.
+        pub(crate) fn with_tasks<F, R>(&self, mut f: F) -> R
+        where
+            F: FnMut(Iter<'_, Task<S>>) -> R
+        {
+            f(self.inner.lock().list.tasks())
+        }
+    }
+
+    impl<S: 'static> Serialize for OwnedTasks<S> {
+        fn serialize<Ser>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error>
+        where
+            Ser: Serializer,
+        {
+            let mut s = serializer.serialize_seq(None)?;
+            self.with_tasks(|tasks| {
+                for task in tasks {
+                    s.serialize_element(&task.raw)?;
+                }
+                Ok(())
+            })?;
+            s.end()
+        }
+    }
+}
+
 impl<S: 'static> LocalOwnedTasks<S> {
     pub(crate) fn new() -> Self {
         Self {

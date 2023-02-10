@@ -340,7 +340,7 @@ impl<S: 'static> Task<S> {
         }
     }
 
-    fn header(&self) -> &Header {
+    pub(crate) fn header(&self) -> &Header {
         self.raw.header()
     }
 
@@ -467,6 +467,19 @@ impl<S> fmt::Debug for Task<S> {
 impl<S> fmt::Debug for Notified<S> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "task::Notified({:p})", self.0.header())
+    }
+}
+
+cfg_taskdump! {
+    use serde::ser::{Serialize, Serializer};
+
+    impl<S> Serialize for Task<S> {
+        fn serialize<Ser>(&self, serializer: Ser) -> std::result::Result<Ser::Ok, Ser::Error>
+        where
+            Ser: Serializer,
+        {
+            self.raw.serialize(serializer)
+        }
     }
 }
 

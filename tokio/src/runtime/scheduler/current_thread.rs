@@ -433,9 +433,40 @@ cfg_metrics! {
     }
 }
 
+cfg_taskdump! {
+    use crate::util::linked_list::Iter;
+
+    impl Handle {
+        /// Locks this runtime's collection owned tasks,
+        /// and calls `f` on an iterator over them.
+        pub(crate) fn with_tasks<F, R>(&self, f: F) -> R
+        where
+            F: FnMut(Iter<'_, Task<Arc<Self>>>) -> R
+        {
+            self.shared.owned.with_tasks(f)
+        }
+    }
+}
+
 impl fmt::Debug for Handle {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("current_thread::Handle { ... }").finish()
+    }
+}
+
+cfg_taskdump! {
+    use serde::ser::{Serialize, Serializer, SerializeStruct};
+
+    impl Serialize for Handle {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let mut s = serializer.serialize_struct("Runtime", 2)?;
+            s.serialize_field("flavor", "current-thread")?;
+            s.serialize_field("tasks", &self.shared.owned)?;
+            s.end()
+        }
     }
 }
 

@@ -250,6 +250,21 @@ impl Clone for RawTask {
 
 impl Copy for RawTask {}
 
+cfg_taskdump! {
+    use serde::ser::{Serialize, Serializer, SerializeStruct};
+
+    impl Serialize for RawTask {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let mut s = serializer.serialize_struct("Task", 1)?;
+            s.serialize_field("state", &self.header().state.load())?;
+            s.end()
+        }
+    }
+}
+
 unsafe fn poll<T: Future, S: Schedule>(ptr: NonNull<Header>) {
     let harness = Harness::<T, S>::from_raw(ptr);
     harness.poll();

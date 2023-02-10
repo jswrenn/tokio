@@ -290,6 +290,41 @@ cfg_io_readiness! {
     }
 }
 
+cfg_taskdump! {
+    pub(crate) struct Iter<'a, T: Link> {
+        list: &'a mut LinkedList<T, T::Target>,
+        curr: Option<NonNull<T::Target>>,
+    }
+
+    impl<T: Link> LinkedList<T, T::Target> {
+        pub(crate) fn tasks(&mut self) -> Iter<'_, T> {
+            let curr = self.head;
+            Iter {
+                curr,
+                list: self,
+            }
+        }
+    }
+
+    impl<'a, T> Iterator for Iter<'a, T>
+    where
+        T: Link,
+    {
+        type Item = T::Handle;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if let Some(curr) = self.curr {
+                // safety: the pointer references data contained by the list
+                self.curr = unsafe { T::pointers(curr).as_ref() }.get_next();
+                return Some(unsafe { T::from_raw(curr) })
+            }
+
+            None
+        }
+    }
+
+}
+
 // ===== impl Pointers =====
 
 impl<T> Pointers<T> {

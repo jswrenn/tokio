@@ -321,6 +321,18 @@ cfg_metrics! {
     }
 }
 
+cfg_taskdump! {
+    impl fmt::Display for Handle {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(&match &self.inner {
+                scheduler::Handle::CurrentThread(h) => serde_json::to_string_pretty(h.as_ref()),
+                #[cfg(feature = "rt-multi-thread")]
+                scheduler::Handle::MultiThread(h) => serde_json::to_string_pretty(h.as_ref()),
+            }.map_err(|_| fmt::Error)?)
+        }
+    }
+}
+
 /// Error returned by `try_current` when no Runtime has been started
 #[derive(Debug)]
 pub struct TryCurrentError {

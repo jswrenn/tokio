@@ -91,6 +91,22 @@ cfg_metrics! {
     }
 }
 
+cfg_taskdump! {
+    use serde::ser::{Serialize, Serializer, SerializeStruct};
+
+    impl Serialize for Handle {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let mut s = serializer.serialize_struct("Runtime", 2)?;
+            s.serialize_field("flavor", "multi-thread")?;
+            s.serialize_field("tasks", &self.shared.owned)?;
+            s.end()
+        }
+    }
+}
+
 impl fmt::Debug for Handle {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("multi_thread::Handle { ... }").finish()

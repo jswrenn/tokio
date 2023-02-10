@@ -593,3 +593,24 @@ impl fmt::Debug for Snapshot {
             .finish()
     }
 }
+
+cfg_taskdump! {
+    use serde::ser::{Serialize, Serializer, SerializeStruct};
+
+    impl Serialize for Snapshot {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            let mut s = serializer.serialize_struct("State", 7)?;
+            s.serialize_field("is_running", &self.is_running())?;
+            s.serialize_field("is_complete", &self.is_complete())?;
+            s.serialize_field("is_notified", &self.is_notified())?;
+            s.serialize_field("is_cancelled", &self.is_cancelled())?;
+            s.serialize_field("is_join_interested", &self.is_join_interested())?;
+            s.serialize_field("is_join_waker_set", &self.is_join_waker_set())?;
+            s.serialize_field("ref_count", &self.ref_count())?;
+            s.end()
+        }
+    }
+}
